@@ -1,0 +1,38 @@
+Curses::Forms Module for Perl
+==============================
+
+Author: Arthur Corliss
+Date:  February 12, 1999
+
+Description:
+------------
+
+Complement to Curses::Widgets, makes designing forms even easier.
+
+NOTE:  This is alpha code, and an initial proof-of-concept release!  DO NOT
+START BUILDING PRODUCTION APPLICATIONS BASED ON THIS CODE.  I MAKE NO
+GUARANTEES THAT THE SYNTAX, FUNCTIONS, AND GENERAL USAGE WON'T CHANGE BETWEEN
+NOW AND THE BETA RELEASE.
+
+Requirements:
+-------------
+
+--(n)Curses libraries
+--Curses module
+--Curses::Widgets module
+
+Instructions:
+-------------
+
+All that one needs to do is:
+
+	perl Makefile.pl
+	make test
+	make install
+
+Documentation for using the module is available if one types the following:
+
+	perldoc Curses::Forms
+
+If you find any value in this module, write me!  All hints, tips, and wishes
+are welcome at corliss@odinicfoundation.org.

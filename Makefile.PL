@@ -1,0 +1,13 @@
+use ExtUtils::MakeMaker;
+
+%mods = ( 'Curses'	=> '0',
+	'Curses::Widgets' => '1.0' );
+
+WriteMakefile(
+    'NAME'	=> 'Curses::Forms',
+	'AUTHOR' => 'Arthur Corliss <corliss@odinicfoundation.org>',
+	'ABSTRACT' => 
+	'Complement to Curses::Widgets for high level access to form design.',
+    'VERSION' => '0.1',
+	'PREREQ_PM'	=> \%mods
+);

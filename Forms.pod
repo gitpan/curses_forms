@@ -1,0 +1,155 @@
+=head1 NAME
+
+Curses::Forms -- Curses-based form handling for Curses::Widgets
+
+=head1 Doc/Module Version info
+
+$Id: Forms.pod,v 0.1 2000/02/12 11:56:01 corliss Exp corliss $
+
+=head1 SYNOPSIS
+
+	use Curses::Forms;
+
+=head1 REQUIREMENTS
+
+Requires the Curses module, Curses or nCurses libraries, and Curses::Widgets.  
+You must still 'use Curses;' in your script, as well as 'use Curses::Widgets'.
+
+=head1 DESCRIPTION
+
+This module provides an object-oriented approach to managing separate forms
+composed of multiple widgets.  This approach removes the need to code any
+handling for form navigation.  Only the list of widgets, the widget tab order,
+and any special key/function bindings need be used.  Once the form is
+initialised, it handles everything else on its own.
+
+=head1 PUBLIC METHODS
+
+=over 4
+
+=item *
+new
+
+=item *
+add
+
+=item *
+bind
+
+=item *
+order
+
+=item *
+activate
+
+=back
+
+=head1 PUBLIC VARIABLES
+
+=over 4
+
+=item *
+DEF_ACTV
+
+=item *
+DEF_INACTV
+
+=item *
+DEF_TAB
+
+=item *
+DEF_FUNC
+
+=item *
+ORDER
+
+=back
+
+=head1 METHODS
+
+=head2 new
+
+A description of the new method will go here.
+
+	B<Example>
+
+=head2 add
+
+A description of the add method will go here.
+
+	B<Example>
+
+=head2 bind
+
+A description of the bind method will go here.
+
+	B<Example>
+
+=head2 order
+
+A description of the bind method will go here.
+
+	B<Example>
+
+=head2 activate
+
+A description of the bind method will go here.
+
+	B<Example>
+
+=head1 VARIABLES
+
+=head2 DEF_ACTV
+
+A description of the DEF_ACTV variable will go here.
+
+	B<Example>
+
+=head2 DEF_INACTV
+
+A description of the DEF_INACTV variable will go here.
+
+	B<Example>
+
+=head2 DEF_TAB
+
+A description of the DEF_TAB variable will go here.
+
+	B<Example>
+
+=head2 DEF_FUNC
+
+A description of the DEF_FUNC variable will go here.
+
+	B<Example>
+
+=head2 ORDER
+
+A description of the ORDER variable will go here.
+
+	B<Example>
+
+=head1 Troubleshooting
+
+Curses::FORMS will never intentionally kill your script.  It does do some
+basic checks upon creation and before executing certain methods, and if it 
+finds something amiss, it will use the B<warn> function to report the error.
+
+When testing scripts that use this module, you'd be well advised to pipe
+STDERR to a file, so that it doesn't mess with the current display.  Checking
+that file later will show you what specific areas of the script have problems.
+Otherwise, the display might become corrupted, and cause perfectly valid
+function calls to B<appear> screwey, when it was only the fact that the STDERR
+moved the cursor location before the next STDOUT output could be rendered.
+
+If you run into problems that appear to be the fault of the module, please
+send me the STDERR output and a script that demonstrates the problem.
+
+=head1 HISTORY
+
+See the Changelog for in depth change history.
+
+=head1 AUTHOR
+
+All bug reports, gripes, adulations, and comments can be sent to Arthur
+Corliss, at B<corliss@odinicfoundation.org>.
