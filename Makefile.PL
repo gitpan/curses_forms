@@ -1,7 +1,7 @@
 use ExtUtils::MakeMaker;
 
 %mods = ( 'Curses'	=> '0',
-	'Curses::Widgets' => '1.0' );
+	'Curses::Widgets' => '1.1' );
 
 WriteMakefile(
     'NAME'	=> 'Curses::Forms',

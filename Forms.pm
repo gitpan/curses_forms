@@ -2,9 +2,9 @@
 #
 # Curses Forms Module
 #
-# $Id: Forms.pm,v 0.1 2000/02/12 11:53:32 corliss Exp corliss $
+# $Id: Forms.pm,v 0.2 2000/02/29 08:46:39 corliss Exp $
 #
-# (c) Arthur Corliss, 1998
+# (c) Arthur Corliss, 2000
 #
 # Requires the Curses module for perl, (n)Curses libraries, and the
 # Curses::Widgets Module
@@ -14,17 +14,37 @@
 package Curses::Forms;
 
 use strict;
-use vars qw($VERSION);
+use vars qw( $VERSION );
 use Curses;
-use Curses::Widgets;
+use Curses::Widgets 1.1;
 
-$VERSION = '.01';
+$VERSION = '.2';
 
 ########################################################################
 #
 # Module code follows. . .
 #
 ########################################################################
+
+{
+	# Private Class attribute for tracking active window handles
+	my @forms = ();
+
+	# Add a window handle for an active form
+	sub _add_handle {
+		push(@forms, shift);
+	}
+
+	# Remove a window handle
+	sub _del_handle {
+		pop(@forms);
+	}
+
+	sub refresh_forms {
+		# Refresh all open handles
+		foreach (@forms) { $_->touchwin; $_->refresh };
+	}
+}
 
 sub new {
 	# New class constructor
@@ -76,6 +96,8 @@ sub _conf {
 	$self->{WIDGETS} = {};
 	$self->{BIND} = {};
 	$self->{ORDER} = [];
+	$self->{BORDER} = 0;
+	$self->{TITLE} = '';
 }
 
 sub _preflight {
@@ -96,7 +118,7 @@ sub _preflight {
 	}
 	foreach (@opts) {
 		unless (exists $self->{$_}) {
-			warn "$_ not defined\n";
+			warn "$_ not defined.\n";
 			$self->{DISABLED} = 1;
 		}
 	}
@@ -110,8 +132,21 @@ sub add {
 
 	my $self = shift;
 	my $wdgt_ref;
+	my @widgets = (qw( txt_field list_box buttons calendar ));
 
 	while ($wdgt_ref = shift) {
+		unless (exists $$wdgt_ref{'name'}) {
+			warn "Widget passed without a name--not adding.\n";
+			next;
+		}
+		if (exists ${$self->{WIDGETS}}{$$wdgt_ref{'name'}}) {
+			warn "Widget $$wdgt_ref{'name'} already defined--" .
+				"overwriting old definition.\n"
+		}
+		unless (grep /^$$wdgt_ref{'type'}$/, @widgets) {
+			warn "Widget type $$wdgt_ref{'type'} unknown--not adding.\n";
+			next;
+		}
 		${$self->{WIDGETS}}{$$wdgt_ref{'name'}} = $wdgt_ref;
 	}
 }
@@ -137,20 +172,40 @@ sub bind {
 	}
 }
 
-sub order {
+sub tab_order {
 	# Specify the active widget tab order.
 	#
-	# Usage:  $frm->order(qw( field1 field2 cal1 ));
+	# Usage:  $frm->tab_order(qw( field1 field2 cal1 ));
 
 	my $self = shift;
 	my $wdgt;
 
+	$self->{ORDER} = [];
 	while ($wdgt = shift) {
-		if (exists ${$self->{WIDGETS}}{$_}) {
-			push(@{$self->{ORDER}}, $_);
+		if (exists ${$self->{WIDGETS}}{$wdgt}) {
+			push(@{$self->{ORDER}}, $wdgt);
 		} else {
-			warn "Non-existent widget in order array: $_\n";
+			warn "Non-existent widget in order array: $wdgt\n";
 		}
+	}
+}
+
+sub set_defaults {
+	# Specify form-wide defaults.
+	#
+	# Usage:  $frm->set_defaults( DEF_FUNC => \&some_func );
+
+	my $self = shift;
+	my %defs = @_;
+	my @valid = qw( DEF_FUNC DEF_TAB DEF_ACTV DEF_INACTV BORDER TITLE
+		BORDER_COLOUR );
+
+	foreach (keys %defs) {
+		unless (grep /^$_$/, @valid) {
+			warn "Unknown option:  $_\n";
+			next;
+		}
+		$self->{$_} = $defs{$_};
 	}
 }
 
@@ -165,22 +220,35 @@ sub activate {
 	my $draw_only = shift || 0;
 	my @order = @{$self->{ORDER}};
 	my $widget = 0;
-	my ($fwh, $wdgt_ref, %opts);
+	my ($fwh, $wdgt_ref, %opts, $pos);
 	my ($key, $content, $tmp, $actn);
 
 	# Do preflight checks
 	$self->_preflight;
 	return if ($self->{DISABLED});
 
-	# Create the window
+	# Create the window and add it to the active forms array
 	$fwh = newwin($self->{LINES}, $self->{COLS}, $self->{Y}, $self->{X});
+	_add_handle($fwh);
 
 	# Draw the form (all widgets rendered inactive)
+	if ($self->{BORDER}) {
+		select_colour($fwh, $self->{'BORDER_COLOUR'}) if
+			($self->{'BORDER_COLOUR'});
+		$fwh->box(ACS_VLINE, ACS_HLINE);
+		$fwh->attrset(0);
+	}
+	if ($self->{TITLE} ne '') {
+		$self->{TITLE} = substr($self->{TITLE}, 0, $self->{COLS} - 2)
+			if (length($self->{TITLE}) > $self->{COLS} - 2);
+		$fwh->standout;
+		$fwh->addstr(0, 1, $self->{TITLE});
+		$fwh->standend;
+	}
 	foreach (keys %{$self->{WIDGETS}}) {
 		$wdgt_ref = ${$self->{WIDGETS}}{$_};
 		$self->_draw_wdgt($fwh, $wdgt_ref);
 	}
-	$fwh->refresh;
 
 	# Take an early exit if a draw only request was made
 	if ($draw_only) {
@@ -193,32 +261,34 @@ sub activate {
 	$opts{'function'} = $self->{ DEF_FUNC } if ($self->{ DEF_FUNC });
 	$actn = 1;
 	while ($actn ne "exit") {
+		$fwh->refresh;
 
 		# Grab a reference to the current widget
 		$wdgt_ref = ${$self->{WIDGETS}}{$order[$widget]};
 
 		# Process according to type
 		if ($$wdgt_ref{'type'} eq "txt_field") {
-			($key, $content) = txt_field( 'window'		=> $fwh,
+			($key, $content, $pos) = txt_field( 'window'		=> $fwh,
 				%opts, %$wdgt_ref);
 			$$wdgt_ref{'content'} = $content;
-			$actn = $self->_proc_keys($wdgt_ref, $fwh, $key, $content);
+			$$wdgt_ref{'pos'} = $pos;
+			$actn = $self->_proc_keys($wdgt_ref, $fwh, $key);
 
 		} elsif ($$wdgt_ref{'type'} eq "buttons") {
 			($key, $content) = buttons( 'window'		=> $fwh,
-					 %opts, %$wdgt_ref);
+				%opts, %$wdgt_ref);
 			$$wdgt_ref{'active_button'} = $content;
-			$actn = $self->_proc_keys($wdgt_ref, $fwh, $key, $content);
+			$actn = $self->_proc_keys($wdgt_ref, $fwh, $key);
 
 		} elsif ($$wdgt_ref{'type'} eq "list_box") {
 			($key, $content) = list_box( 'window'		=> $fwh,
-					 %opts, %$wdgt_ref);
+				%opts, %$wdgt_ref);
 			$$wdgt_ref{'selected'} = $content;
-			$actn = $self->_proc_keys($wdgt_ref, $fwh, $key, $content);
+			$actn = $self->_proc_keys($wdgt_ref, $fwh, $key);
 
 		} elsif ($$wdgt_ref{'type'} eq "calendar") {
 			$key = calendar( 'window'		=> $fwh,
-				 %opts, %$wdgt_ref);
+				%opts, %$wdgt_ref);
 			$actn = $self->_proc_keys($wdgt_ref, $fwh, $key);
 
 		} else {
@@ -234,7 +304,8 @@ sub activate {
 		$self->_draw_wdgt($fwh, $wdgt_ref) if ($actn =~ /^(exit|tab)$/);
 	}
 
-	# Destroy window
+	# Remove from the active window array and destroy window
+	_del_handle();
 	$fwh->delwin;
 
 	# Return all the widget values
@@ -250,10 +321,9 @@ sub _proc_keys {
 	my $wdgt_ref = shift;
 	my $fwh = shift;
 	my $key = shift;
-	my $content = shift || '';
 	my $bnd_ref = ${$self->{BIND}}{$$wdgt_ref{'name'}} || [];
 	my $nxt = $self->{DEF_TAB};
-	my ($out, $out2, $out_ref, $actn);
+	my ($out_ref, $actn, $rtrn);
 
 	# Check for each matching binding for the widget
 	foreach (@$bnd_ref) {
@@ -266,71 +336,19 @@ sub _proc_keys {
 			} elsif ($$_[1] eq "Nxt_Wdgt") {
 				$actn = "tab";
 
-			} elsif ($$_[1] eq "Mod_Own") {
-
-				# Select type widget
-				if ($wdgt_ref->{'type'} eq 'txt_field') {
-					$out = &{$$_[2]}($key, $content);
-					$wdgt_ref->{'content'} = $out;
-
-				} elsif ($wdgt_ref->{'type'} eq 'list_box') {
-					($out, $out2) = 
-						&{$$_[2]}($key, $content, $wdgt_ref->{'list'});
-					$wdgt_ref->{'selected'} = $out;
-					%{$wdgt_ref->{'list'}} = %$out2;
-
-				} elsif ($wdgt_ref->{'type'} eq 'buttons') {
-					($out, $out2) = 
-						&{$$_[2]}($key, $content, $wdgt_ref->{'buttons'});
-					$wdgt_ref->{'active_button'} = $out;
-					@{$wdgt_ref->{'buttons'}} = @$out2;
-
-				} elsif ($wdgt_ref->{'type'} eq 'calendar') {
-					$content = $wdgt_ref->{'date_disp'};
-					$out = &{$$_[2]}($key, $content);
-					@{$wdgt_ref->{'date_disp'}} = @$out;
-
+			} elsif ($$_[1] =~ /^Mod_(Own|Oth)$/) {
+				if ($1 eq "Own") {
+					$out_ref = $wdgt_ref;
 				} else {
-					warn $wdgt_ref->{'type'} . " not known.\n";
+					$out_ref = ${$self->{WIDGETS}}{$$_[3]};
 				}
-				$actn = "cont";
-
-			} elsif ($$_[1] eq "Mod_Oth") {
-				$out_ref = ${$self->{WIDGETS}}{$$_[3]};
-
-				# Select type conversion
-				if ($wdgt_ref->{'type'} eq 'txt_field' &&
-					$out_ref->{'type'} eq 'list_box') {
-
-					# txt_field to list_box not done yet
-
-				} elsif ($wdgt_ref->{'type'} eq 'list_box' &&
-					$out_ref->{'type'} eq 'txt_field') {
-					$out = &{$$_[2]}($key, $wdgt_ref->{'selected'},
-						$wdgt_ref->{'list'});
-					$out_ref->{'content'} = $out;
-
-				} elsif ($wdgt_ref->{'type'} eq 'txt_field' &&
-					$out_ref->{'type'} eq 'calendar') {
-					$out = [ &{$$_[2]}($key, $content) ];
-					@{$out_ref->{'date_disp'}} = @$out if (scalar @$out == 3);
-
-				} elsif ($wdgt_ref->{'type'} eq 'calendar' &&
-					$out_ref->{'type'} eq 'txt_field') {
-					$out = &{$$_[2]}($key, $wdgt_ref->{'date_disp'});
-					$out_ref->{'content'} = $out;
-
-				} elsif ($wdgt_ref->{'type'} eq 'txt_field' &&
-					$out_ref->{'type'} eq 'txt_field') {
-					$out = &{$$_[2]}($key, $content);
-					$out_ref->{'content'} = $out;
-
-				} else {
-					warn $wdgt_ref->{'type'} . " to " . $out_ref->{'type'} .
-						" conversions not allowed.\n";
-				}
+				$rtrn = &{$$_[2]}($key, $wdgt_ref, $out_ref);
 				$self->_draw_wdgt($fwh, $out_ref);
-				$actn = "cont";
+				if (defined $rtrn  && $rtrn eq "Quit_Form") {
+					$actn = "exit";
+				} else {
+					$actn = "cont";
+				}
 			}
 		}
 	}
@@ -347,30 +365,14 @@ sub _draw_wdgt {
 	my $self = shift;
 	my $fwh = shift;
 	my $wdgt_ref = shift;
+	my $function = $$wdgt_ref{'type'};
 
-	if ($$wdgt_ref{'type'} eq "txt_field") {
-		txt_field( 'window'		=> $fwh,
-				   %$wdgt_ref,
-				   'draw_only'	=> 1,
-				   'border'		=> $self->{DEF_INACTV});
-	} elsif ($$wdgt_ref{'type'} eq "buttons") {
-		buttons( 'window'		=> $fwh,
-				 %$wdgt_ref,
-				 'draw_only'	=> 1,
-				 'border'		=> $self->{DEF_INACTV});
-	} elsif ($$wdgt_ref{'type'} eq "list_box") {
-		list_box( 'window'		=> $fwh,
-				  %$wdgt_ref,
-				 'draw_only'	=> 1,
-				 'border'		=> $self->{DEF_INACTV});
-	} elsif ($$wdgt_ref{'type'} eq "calendar") {
-		calendar( 'window'		=> $fwh,
-				 %$wdgt_ref,
-				 'draw_only'	=> 1,
-				 'border'		=> $self->{DEF_INACTV});
-	} else {
-		warn "Unknown widget type:  $$wdgt_ref{'type'}\n";
-	}
+	no strict 'refs';
+
+	&$function( 'window'=> $fwh,
+		   %$wdgt_ref,
+		   'draw_only'	=> 1,
+		   'border'		=> $self->{DEF_INACTV});
 }
 
 1;

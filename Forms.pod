@@ -4,16 +4,37 @@ Curses::Forms -- Curses-based form handling for Curses::Widgets
 
 =head1 Doc/Module Version info
 
-$Id: Forms.pod,v 0.1 2000/02/12 11:56:01 corliss Exp corliss $
+$Id: Forms.pod,v 0.2 2000/02/29 08:47:25 corliss Exp $
 
 =head1 SYNOPSIS
 
 	use Curses::Forms;
 
+	$form = Curses::Forms->new({ 'Y' => 1, 'X' => 0, 
+		'LINES' => $LINES - 2, 'COLS' => $COLS });
+	$form->add( { 'type' => 'list_box', 'name' => 'cal_list',
+		      'ypos' => 0, 'xpos' => 0,
+		      'lines' => 8, 'cols' => $COLS - 2,
+		      'title' => ' Calendars ', 'list' => \@list },
+		    { 'type' => 'txt_field', 'name' => 'record',
+		      'ypos' => 10, 'xpos' => 0, 'regex' => "\tqQ",
+		      'lines' => $LINES - 14, 'cols' => $COLS - 2,
+		      'title' => ' Record ', 'edit' => 0 });
+	$form->set_defaults( DEF_FUNC => \&clock);
+	$form->tab_order("cal_list");
+	$form->bind(
+		["cal_list", "[ \n]", "Mod_Oth", \&rtrv_cal_rec, 
+			"record" ],
+		["cal_list", "[qQ]", "Quit_Form"],
+		["cal_list", "[bB]", "Mod_Oth", \&browse_cal, 
+			"record" ]);
+	$form->activate;
+
 =head1 REQUIREMENTS
 
 Requires the Curses module, Curses or nCurses libraries, and Curses::Widgets.  
 You must still 'use Curses;' in your script, as well as 'use Curses::Widgets'.
+Curses::Widgets v1.1 is the minimum version needed.
 
 =head1 DESCRIPTION
 
@@ -37,31 +58,16 @@ add
 bind
 
 =item *
-order
+tab_order
+
+=item *
+set_defaults
 
 =item *
 activate
 
-=back
-
-=head1 PUBLIC VARIABLES
-
-=over 4
-
 =item *
-DEF_ACTV
-
-=item *
-DEF_INACTV
-
-=item *
-DEF_TAB
-
-=item *
-DEF_FUNC
-
-=item *
-ORDER
+refresh_forms
 
 =back
 
@@ -69,69 +75,310 @@ ORDER
 
 =head2 new
 
-A description of the new method will go here.
+The 'new' method returns an object handle by which the form is both
+initialised and managed.  One argument, in the form of an anonymous hash, 
+much be passed which specifies the desired geometry.
+
+This method merely creates and initialises the object, no error checking is
+done outside of verifying that the following parameters were passed:
+
+	Parameter
+	------------------------------------------------
+	Y	The y coordinate for the top-left corner
+		of the form
+	X	The x coordinate for the top-left corner
+		of the form
+	LINES	The number of lines in the form
+	COLS	The number of columns in the form
 
 	B<Example>
+
+	$form = Curses::Forms->new({ 'Y' => 1, 'X' => 0, 
+		'LINES' => $LINES - 2, 'COLS' => $COLS });
 
 =head2 add
 
-A description of the add method will go here.
+The 'add' method is used to add widgets to the form, each widget being
+passed as an anonymous hash.  All the necessary options for the specific
+widget type must be passed, along with two other parameters:
+
+	Parameters
+	-----------
+	type	The type of widget, as specified by the function name
+		in Curses::Widgets
+	name	A unique name for referencing on the form (this will be
+		the identifier used in the tab_order and bind methods)
+
+The only error checking done at this point is ensuring that each widget is
+named, and uniquely so, as well as ensuring that the widget type is a type
+known to the module.  To get a list of options for the different types of
+widgets, see the documentation for B<Curses::Widgets>.
 
 	B<Example>
+
+	$form->add( { 'type' => 'list_box', 'name' => 'cal_list',
+		      'ypos' => 0, 'xpos' => 0,
+		      'lines' => 8, 'cols' => $COLS - 2,
+		      'title' => ' Calendars ', 'list' => \@list },
+		    { 'type' => 'txt_field', 'name' => 'record',
+		      'ypos' => 10, 'xpos' => 0, 'regex' => "\tqQ",
+		      'lines' => $LINES - 14, 'cols' => $COLS - 2,
+		      'title' => ' Record ', 'edit' => 0 });
 
 =head2 bind
 
-A description of the bind method will go here.
+The 'bind' method allows certain functions and actions to be bound to specific
+widgets, and triggered by specific key strokes.  Each action/function binding
+is passed as an anonymous array, each containing the following fields, in the 
+following order:
+
+	Bind record
+	-----------
+	$anon[0]	The name of widget to bind the action to
+	$anon[1]	The input regex which will trigger the 
+			action (the widget must not trap for the 
+			regex above, but must exit with that input 
+			to allow the form to call this binding)
+	$anon[2]	The action to be taken
+	$anon[3]	The function to call (only needed for 
+			Mod_Own/Mod_Oth)
+	$anon[4]	The name of the widget to call the action 
+			on (only needed for Mod_Oth)
+
+	Actions
+	------------
+	Quit_Form	Exit the activate routine, and return all 
+			the current widget values
+	Nxt_Wdgt	Move the active widget focus to the next 
+			widget as specified by the tab order.
+	Mod_Own		Call the specified function and pass it a 
+			reference to the current widget's state hash
+	Mod_Oth		Call the specified function and pass it a 
+			reference to both the current and the 
+			specified widget
+
+This method must B<not> be called until the widgets are already added to the
+form.  If you call it before, it will trigger a series of warnings about
+attempts to bind to a non-existent widget.
+
+One should note that bindings for specific widgets and keys can be stacked,
+with the bindings for that widget/key combination processed in the order in
+which they were passed to the form.
+
+It is important to note that any function called must adhere to the following
+guidelines:
+
+	1)  It must accept two or three arguments, depending on 
+	    whether the function must serve Mod_Own or Mod_Oth 
+	    calls, respectively.  The first argument will always 
+	    be the key pressed which activated the binding.  The 
+	    second and third will be references to state hashes, 
+	    where all widget options may be manipulated directly, 
+	    according to the argument names listed in the 
+	    B<Curses::Widgets> documentation for those widget types.
+	2)  If desired, it may return the string "Quit_Form" if 
+	    you wish it to exit the current form after calling 
+	    that function.
+
+In the example below, the following routine will be bound to a list box widget
+(as will be seen in the next example).  Upon pressing the 'a' key, a input box
+will be displayed.  If the user enters either an A, R, W, or O, the contents
+of the list box will be modified.  If the user presses a 'd' while the list
+box has the focus, though, the highlighted entry will be deleted from the
+list.
 
 	B<Example>
 
-=head2 order
+	local *mod_priv = sub {
+	    my $key = shift;
+	    my $in_ref = shift;
+	    my ($priv, $button, $prompt);
 
-A description of the bind method will go here.
+	    if (lc($key) eq "a") {
+		$prompt = "Type 'A' for Administrative,\n " .
+		    "'R' for read,\n 'W' for write,\n or " .
+		    "'O' for other.";
+		($priv, $button) = input_box(
+		    'title' => 'Add Privilege', 
+		    'prompt'=> $prompt, 'function' => \&clock);
+
+		Curses::Forms->refresh_forms;
+
+		if ($button) {
+		    $priv = uc($priv);
+		    if ($priv eq "A") {
+			push(@{$$in_ref{'list'}}, 'Administrative')
+			    unless (grep /Admin/, @{$$in_ref{'list'}});
+		     } elsif ($priv eq "R") { 
+			push(@{$$in_ref{'list'}}, 'Read')
+			    unless (grep /Read/, @{$$in_ref{'list'}});
+		     } elsif ($priv eq "W") {
+			push(@{$$in_ref{'list'}}, 'Write')
+			    unless (grep /Write/, @{$$in_ref{'list'}});
+		     } elsif ($priv eq "O") {
+			push(@{$$in_ref{'list'}}, 'Other')
+			    unless (grep /Other/, @{$$in_ref{'list'}});
+		     } else {
+			status_bar(0, "'$_' is not a valid option.");
+			beep();
+		     }
+		     @{$$in_ref{'list'}} = sort @{$$in_ref{'list'}};
+		}
+	    } elsif ($key =~ /^[Dd]$/) {
+		splice(@{$$in_ref{'list'}}, $$in_ref{'selected'}, 1);
+	    }
+	};
+
+The following example shows the above function being bound to the list box,
+which is named 'privs'.
 
 	B<Example>
+
+	$form->bind(["privs", "[aAdD]", "Mod_Own", \&mod_priv ],
+		["command", "[ \n]", "Mod_Own", \&action ]);
+
+=head2 tab_order
+
+The 'tab_order' method takes a list of widget names in the order that they
+should be given the focus as the user navigates from one to the other.  Note
+that you can leave widgets out of this order if their only function is to
+display information pushed into them via the Mod_Oth action, etc.  You can
+also redefine widget order as needed, since each time the method is called,
+the entire order array is cleared before processing the passed list.
+
+The only error-checking this method does is to verify that each widget
+specified in the order was defined via the 'add' method.
+
+	B<Example>
+
+	$form->tab_order(qw( f_name email name psswd privs command ));
+
+=head2 set_defaults
+
+The 'set_defaults' method allows the setting of form-wide defaults.  It is
+called with a series of key/value pairs, of which the following keys are
+valid:
+
+	Keys
+	------------
+	DEF_FUNC	Subroutine reference, to be used in 
+			the background while each widget is 
+			waiting for input.  Defaults to ''.
+	DEF_TAB		String, for interpolation in a regex 
+			which will be the default key triggering 
+			a change in focus to the next widget 
+			in the tab order.  Defaults to "\t".
+	DEF_ACTV	String, the default colour to be used 
+			by widgets when they have the focus.  
+			Colour choices are those supported by 
+			the 'select_colour' function provided by
+			B<Curses::Widgets>.  Defaults to 'green'.
+	DEF_INACTV	String, the default colour to be used 
+			by widgets when they do not have the 
+			focus.  Defaults to 'red'.
+	BORDER		Boolean, a true or false value which 
+			controls whether or not the form has a 
+			border.  Defaults to 0.
+	BORDER_COLOUR	String, with the colour to be used when 
+			drawing the form border.  Defaults to 
+			the default foreground colour.
+	TITLE		String, the title to be superimposed on 
+			the form border, or where the form border 
+			would be if used.
+
+All arguments are optional, and if the defaults are acceptable, this method
+can be completely ignored.  The only error-checking done is a check on each
+key/value pair to see if they are a known option.
+
+	B<Example>
+
+	$form->set_defaults(DEF_FUNC => \&clock,
+			BORDER => 1,
+			BORDER_COLOUR => 'blue',
+			TITLE => ' Add User ');
 
 =head2 activate
 
-A description of the bind method will go here.
+The 'activate' method is used for two purpose:  to simply display the form in
+it's current state and immediately exit, and to display and activate the form,
+capturing input and managing widget navigation until the 'Quit_Form' action is
+recieved.
+
+To display the form, pass the method any argument that evaluates to 'true'.
+To activate the form, call the method with no arguments.
+
+Error checking is done upon each call to ensure that the form geometry won't
+exceed the current console dimensions, as well as for each widget, to ensure
+their geometry doesn't exceed the form's dimensions.
 
 	B<Example>
 
-=head1 VARIABLES
+	$form->activate;
 
-=head2 DEF_ACTV
+=head2 refresh_forms
 
-A description of the DEF_ACTV variable will go here.
+The 'refresh_forms' method is a class method, not an object method (though
+calling it via the object reference will achieve the same objective).  The
+purpose of this function to clean the screen of any form remnants in
+background forms.  For example, consider the situation of three forms with the
+following dimensions:
+
+	+-Form 1----------------------------------------------------+
+	|							    |
+	| +-Form 2------------------------------+		    |
+	| |					|		    |
+	| |	+-Form 3-----------------------------+		    |
+	| |	|				     |		    |
+	| |	|				     |		    |
+	| |	+------------------------------------+		    |
+	| |					|		    |
+	| +-------------------------------------+		    |
+	+-----------------------------------------------------------+
+
+The scenario here is that an action taken on Form 1 prompted Form 2 to pop up,
+and an action on Form 2 prompted Form 3 to be displayed.  Because each form is
+created in its own private window (not a sub or derived window from the master
+window created during Curses initialisation), when Form 3, disappears, and
+Form 2 regains the focus, the region outside of Form 2 will not be refreshed
+to remove the overlapping Form 3 region, leaving you with the following:
+
+	+-Form 1----------------------------------------------------+
+	|							    |
+	| +-Form 2------------------------------+		    |
+	| |					|		    |
+	| |					|----+		    |
+	| |					|    |		    |
+	| |					|    |		    |
+	| |					|----+		    |
+	| |					|		    |
+	| +-------------------------------------+		    |
+	+-----------------------------------------------------------+
+
+Calling this class method will send a touchwin and refresh signal to each of
+the windows, from back to front, leaving you with:
+
+	+-Form 1----------------------------------------------------+
+	|							    |
+	| +-Form 2------------------------------+		    |
+	| |					|		    |
+	| |					|		    |
+	| |					|		    |
+	| |					|		    |
+	| |					|		    |
+	| |					|		    |
+	| +-------------------------------------+		    |
+	+-----------------------------------------------------------+
+
+It is good to call this function whenever a child window is closed whose
+borders extended past the parent window's borders.
 
 	B<Example>
 
-=head2 DEF_INACTV
-
-A description of the DEF_INACTV variable will go here.
-
-	B<Example>
-
-=head2 DEF_TAB
-
-A description of the DEF_TAB variable will go here.
-
-	B<Example>
-
-=head2 DEF_FUNC
-
-A description of the DEF_FUNC variable will go here.
-
-	B<Example>
-
-=head2 ORDER
-
-A description of the ORDER variable will go here.
-
-	B<Example>
+	Curses::Forms->refresh_forms;
 
 =head1 Troubleshooting
 
-Curses::FORMS will never intentionally kill your script.  It does do some
+Curses::Forms will never intentionally kill your script.  It does do some
 basic checks upon creation and before executing certain methods, and if it 
 finds something amiss, it will use the B<warn> function to report the error.
 
